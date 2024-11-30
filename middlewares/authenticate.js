@@ -32,7 +32,7 @@ const authenticate = async (req, res, next) => {
         res.locals.userid = user.userid
         res.locals.token = token
         // localStorage.setItem('token', token)
-        // console.log("from auth",res.locals.userid)
+        console.log("from auth",res.locals.userid)
         
         next()
     } catch (error) {
