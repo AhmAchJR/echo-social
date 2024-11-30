@@ -1,14 +1,13 @@
 import sql from 'mssql';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import connectDb from '../db/db.js';
+import dbConnection from '../db/db.js';
 
 dotenv.config();
+const db = await dbConnection()
 
 const authorizing = async (req, res, next) => {
     try {
-        // const pool = await connectDb();
-        // const request = new sql.Request(pool);
         const token = req.headers['x-auth-token'];
 
         if (!token) {
@@ -16,14 +15,23 @@ const authorizing = async (req, res, next) => {
         }
 
         const decodedPayload = jwt.verify(token, process.env.JWT_SECRET)
-        // const { userid, handle, email , role } = decodedPayload
+        const { userid, handle, email , role } = decodedPayload
+        
+        const selectedUser = await db.get("select * from users where (userid=$userid AND email=$email AND role=$role",
+            {
+                $userid : userid , 
+                $email : email , 
+                $role : role
+            },
+            function(err , raw){
+                if(err){
+                    console.error("Error Selecting Data:", err)
+                }
 
-        // request.input('handle', sql.NVarChar, decodedPayload.handle)
-        // request.input('email', sql.NVarChar, decodedPayload.email)
-        // const selectQuery = `SELECT * FROM [users] WHERE handle = @handle AND email = @email;`
-        // const selectedUser = await request.query(selectQuery);
-
-        if(decodedPayload.role.trim() !== 'admin'){
+                return raw
+            }
+        )
+        if(decodedPayload.role.trim() !== selectedUser.role){
             return res.status(401).json({
                 message : "Your Are Not Authorized"
             })

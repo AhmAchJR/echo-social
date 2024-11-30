@@ -1,7 +1,10 @@
-import sql from 'mssql';
 import jwt from 'jsonwebtoken';
-import connectDb from '../db/db.js';
+import dbConnection from '../db/db.js';
 import bcrypt from 'bcrypt';
+
+const db = await dbConnection()
+// console.log(db)
+
 
 export const signUp = async(req , res)=>{
     const {pass , email , handle} = req.body
@@ -9,36 +12,94 @@ export const signUp = async(req , res)=>{
     if(!pass || !email || !handle){
         return res.status(400).send("All Fields Are Required")
     }
-    const pool = await connectDb()
-    const request = new sql.Request(pool)
-    const selectQuery = `select * from [users] where handle = @selectedhandle`
-    request.input('selectedhandle' , sql.NVarChar , handle)
-    const user = await request.query(selectQuery)
-    console.log(user.recordset);
+    
+    const row = await db.get("select * from users where handle = $handle or email = $email" , 
+        {
+            $handle : handle , 
+            $email : email
+        } 
+    )
+    console.log(row);
 
-    if(user.recordset.length !=0){
+    if(row){
         return res.status(400).send("User Already Exist")
     }
 
     const salt = await bcrypt.genSalt(10)
     const hashedPass = await bcrypt.hash(pass ,salt)
 
+    console.log(req.files)
+
+    // Ensure file is uploaded
+    if (!req.file) {
+        return res.status(400).send("Profile image is required");
+    }
     const picPath = req.file.path
     
-    const insertQuery = `insert into [users] (pass , email , handle , pic)
-                        output inserted.email , inserted.handle , inserted.username, inserted.userid , inserted.pic 
-                        values(@pass , @email , @handle , @pic)`
-    request.input('pass' , sql.NVarChar , hashedPass)
-    request.input('email' , sql.NVarChar , email)
-    request.input('handle' , sql.NVarChar , handle)
-    request.input('pic' , sql.NVarChar , picPath)    
-    const insertedUser = await request.query(insertQuery)
+    console.log(picPath)
+    await db.run("insert into users (pass , email , handle , pic) values($pass , $email , $handle , $pic)" , 
+        {
+            $pass : hashedPass , 
+            $email : email , 
+            $handle : handle , 
+            $pic : picPath
+        }
+    )
+
+    const insertedUser = await db.get("select * from users where handle = $handle or email = $email" , 
+        {
+            $handle : handle , 
+            $email : email
+        } 
+        
+    )
 
     res.status(201).json({
         message: "User Registered Successfully",
         user : insertedUser
     })
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

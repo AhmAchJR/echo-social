@@ -1,148 +1,106 @@
-/*sysobjects: This is a system table in SQL Server that contains information about all the objects in the database
-(tables, views, procedures, etc.).*/
 
--- 001-initial.sql
+-- Create users table
+CREATE TABLE IF NOT EXISTS users (
+    userid INTEGER PRIMARY KEY AUTOINCREMENT,
+    pass TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    handle TEXT NOT NULL UNIQUE,
+    bio TEXT,
+    username TEXT,
+    pic TEXT
+);
 
--- Create Migrations Table
+-- Create post table
+CREATE TABLE IF NOT EXISTS post (
+    postid INTEGER PRIMARY KEY AUTOINCREMENT,
+    userid INTEGER NOT NULL,
+    content TEXT,
+    visibility TEXT DEFAULT 'public',
+    createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userid) REFERENCES users(userid)
+);
 
--- Check if the migrations table exists, and create it if not
--- Ensure the 'migrations' table exists
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name = 'migrations' AND xtype = 'u')
-BEGIN
-    CREATE TABLE [migrations] (
-        [id] INT PRIMARY KEY IDENTITY(1,1),
-        [migrationname] VARCHAR(255) NOT NULL,
-        [applaiedat] DATETIME DEFAULT GETDATE()
-    );
-END
+-- Create comments table
+CREATE TABLE IF NOT EXISTS comments (
+    commentid INTEGER PRIMARY KEY AUTOINCREMENT,
+    userid INTEGER NOT NULL,
+    postid INTEGER NOT NULL,
+    content TEXT,
+    createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+    parentcommentid INTEGER,
+    FOREIGN KEY (userid) REFERENCES users(userid),
+    FOREIGN KEY (postid) REFERENCES post(postid),
+    FOREIGN KEY (parentcommentid) REFERENCES comments(commentid)
+);
 
--- Check if the migration script has already been applied
-IF NOT EXISTS (SELECT * FROM [migrations] WHERE [migrationname] = '001-initial.sql')
-BEGIN
-    -- Create tables
-    CREATE TABLE [users] (
-        [userid] INT PRIMARY KEY IDENTITY,
-        [pass] NVARCHAR(255) NOT NULL,
-        [email] NVARCHAR(255) NOT NULL UNIQUE,
-        [handle] NVARCHAR(255) NOT NULL UNIQUE,
-        [bio] NVARCHAR(255),
-        [username] NVARCHAR(255),
-        [pic] NVARCHAR(255)
-    );
+-- Create likes table
+CREATE TABLE IF NOT EXISTS likes (
+    likeid INTEGER PRIMARY KEY AUTOINCREMENT,
+    likename TEXT DEFAULT 'like',
+    userid INTEGER NOT NULL,
+    postid INTEGER NOT NULL,
+    FOREIGN KEY (userid) REFERENCES users(userid),
+    FOREIGN KEY (postid) REFERENCES post(postid)
+);
 
-    CREATE TABLE [post] (
-        [postid] INT PRIMARY KEY IDENTITY(1,1),
-        [userid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [content] NVARCHAR(MAX),
-        [visibility] NVARCHAR(20) DEFAULT 'public',
-        [createdat] DATETIME DEFAULT GETDATE()
-    );
+-- Create notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+    notifyid INTEGER PRIMARY KEY AUTOINCREMENT,
+    userid INTEGER NOT NULL,
+    notifytype TEXT,
+    isread INTEGER DEFAULT 0,
+    referenceid INTEGER,
+    createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ntype TEXT NOT NULL,
+    FOREIGN KEY (userid) REFERENCES users(userid)
+);
 
-    CREATE TABLE [comments] (
-        [commentid] INT PRIMARY KEY IDENTITY(1,1),
-        [userid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [postid] INT FOREIGN KEY REFERENCES [post]([postid]),
-        [content] NVARCHAR(MAX),
-        [createdat] DATETIME DEFAULT GETDATE(),
-        [parentcommentid] INT NULL FOREIGN KEY REFERENCES [comments]([commentid])
-    );
+-- Create chat table
+CREATE TABLE IF NOT EXISTS chat (
+    chatid INTEGER PRIMARY KEY AUTOINCREMENT,
+    firstuserid INTEGER NOT NULL,
+    secuserid INTEGER NOT NULL,
+    createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (firstuserid) REFERENCES users(userid),
+    FOREIGN KEY (secuserid) REFERENCES users(userid)
+);
 
-    CREATE TABLE [likes] (
-        [likeid] INT PRIMARY KEY IDENTITY(1,1),
-        [likename] VARCHAR(20) DEFAULT 'like',
-        [userid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [postid] INT FOREIGN KEY REFERENCES [post]([postid])
-    );
+-- Create messages table
+CREATE TABLE IF NOT EXISTS messages (
+    messageid INTEGER PRIMARY KEY AUTOINCREMENT,
+    chatid INTEGER NOT NULL,
+    senderid INTEGER NOT NULL,
+    receiverid INTEGER NOT NULL,
+    isread INTEGER DEFAULT 0,
+    createdat DATETIME DEFAULT CURRENT_TIMESTAMP,
+    content TEXT NOT NULL,
+    FOREIGN KEY (chatid) REFERENCES chat(chatid),
+    FOREIGN KEY (senderid) REFERENCES users(userid),
+    FOREIGN KEY (receiverid) REFERENCES users(userid)
+);
 
-    CREATE TABLE [notifications] (
-        [notifyid] INT PRIMARY KEY IDENTITY(1,1),
-        [userid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [notifytype] VARCHAR(20),
-        [isread] BIT DEFAULT 0,
-        [referenceid] INT,
-        [createdat] DATETIME DEFAULT GETDATE(),
-        [ntype] NVARCHAR(50) NOT NULL,
-        CONSTRAINT [CK_Notifications_Type] CHECK ([ntype] IN ('comment', 'like', 'message', 'follow'))
-    );
+-- Create images table
+CREATE TABLE IF NOT EXISTS images (
+    imageid INTEGER PRIMARY KEY AUTOINCREMENT,
+    postid INTEGER NOT NULL,
+    imgurl TEXT NOT NULL,
+    FOREIGN KEY (postid) REFERENCES post(postid)
+);
 
-    CREATE TABLE [chat] (
-        [chatid] INT PRIMARY KEY IDENTITY(1,1),
-        [firstuserid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [secuserid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [createdat] DATETIME DEFAULT GETDATE()
-    );
+-- Create userblocks table
+CREATE TABLE IF NOT EXISTS userblocks (
+    blockerid INTEGER NOT NULL,
+    blockedid INTEGER NOT NULL,
+    PRIMARY KEY (blockerid, blockedid),
+    FOREIGN KEY (blockerid) REFERENCES users(userid),
+    FOREIGN KEY (blockedid) REFERENCES users(userid)
+);
 
-    CREATE TABLE [messages] (
-        [messageid] INT PRIMARY KEY IDENTITY(1,1),
-        [chatid] INT FOREIGN KEY REFERENCES [chat]([chatid]),
-        [senderid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [receiverid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [isread] BIT DEFAULT 0,
-        [createdat] DATETIME DEFAULT GETDATE(),
-        [content] NVARCHAR(MAX) NOT NULL
-    );
-
-    CREATE TABLE [images] (
-        [imageid] INT PRIMARY KEY IDENTITY(1,1),
-        [postid] INT FOREIGN KEY REFERENCES [post]([postid]),
-        [imgurl] NVARCHAR(255) NOT NULL
-    );
-
-    CREATE TABLE [userblocks] (
-        [blockerid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [blockedid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        PRIMARY KEY ([blockerid], [blockedid])
-    );
-
-    CREATE TABLE [userfollows] (
-        [followerid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        [followedid] INT FOREIGN KEY REFERENCES [users]([userid]),
-        PRIMARY KEY ([followerid], [followedid])
-    );
-
-    -- Insert the applied migration record
-    INSERT INTO [migrations] ([migrationname]) VALUES ('001-initial.sql');
-END
-
-
-
-/*
-The error message Incorrect syntax near the keyword 'user' indicates that there is a problem with the SQL syntax in your migration script,
-specifically involving the word user. In SQL Server, USER is a reserved keyword, 
-so using it as an identifier (such as a table or column name) without proper escaping can cause syntax errors.
-
-Fixing the SQL Syntax Error
-To resolve this issue, you should:
-
-Escape Reserved Keywords: Use square brackets [] to escape reserved keywords like USER. For instance, 
-if you have a table or column named User, it should be written as [User] in your SQL script.
-*/
-
-
-
-/*
-is [] resolve reserved word ,so that i can make objects with the same name 
-ChatGPT said:
-ChatGPT
-Yes, using square brackets ([]) in SQL Server allows you to work with reserved words and 
-other identifiers that might otherwise cause conflicts. Here's how it works:
-
-How Square Brackets Work
-Handling Reserved Words: Reserved words (e.g., user, order, select) can be used as identifiers for tables, columns,
-or other objects if they are enclosed in square brackets. For example, 
-[user] can be used as a table name even though USER is a reserved word.
-
-Special Characters and Spaces: If your identifier includes special characters or spaces,
-you also need to use square brackets. For instance, [employee details] is valid for a table name.
-
-Case Sensitivity: While SQL Server is generally case-insensitive by default, 
-using square brackets ensures that the identifier is treated exactly as specified. 
-This is useful in environments where case sensitivity is configured.
-
-Practical Usage
-Creating Tables and Columns: When creating tables or columns with names that are reserved words, 
-always use square brackets.
-
-Referencing: Similarly, 
-when referencing these objects in SQL queries or constraints, use square brackets to avoid ambiguity.
-*/
+-- Create userfollows table
+CREATE TABLE IF NOT EXISTS userfollows (
+    followerid INTEGER NOT NULL,
+    followedid INTEGER NOT NULL,
+    PRIMARY KEY (followerid, followedid),
+    FOREIGN KEY (followerid) REFERENCES users(userid),
+    FOREIGN KEY (followedid) REFERENCES users(userid)
+);

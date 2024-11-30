@@ -1,0 +1,24 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Welcome, <%= user.name %>!</h1>
+
+    <% if (user.isLoggedIn) { %>
+        <p>You are logged in.</p>
+        <h2>Your Hobbies:</h2>
+        <ul>
+            <% user.hobbies.forEach(hobby => { %>
+                <li><%= hobby %></li>
+            <% }) %>
+        </ul>
+    <% } else { %>
+        <p>Please log in to see your hobbies.</p>
+    <% } %>
+</body>
+</html>

@@ -8,6 +8,7 @@ router.get("/" , getAllPosts)
 router.get("/:id" , getPostById)
 router.post("/" , authenticate , uploadPostImg.array("postimg" , 5) ,createPost)
 router.delete("/:id" , authenticate , deletePost)
-router.patch("/:id" , authenticate  , uploadPostImg.array("postimg" , 5) ,updatePost)
+router.patch("/:id" , authenticate  , uploadPostImg.array("postimg" , 5) , updatePost)
+//req.files : An array containing information about each uploaded file.
 
 export default router

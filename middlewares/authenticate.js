@@ -1,36 +1,40 @@
-import sql from 'mssql';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import connectDb from '../db/db.js';
-
-dotenv.config();
+import dbConnection from '../db/db.js';
+const db = await dbConnection()
+dotenv.config()
 
 const authenticate = async (req, res, next) => {
     try {
-        const pool = await connectDb();
-        const request = new sql.Request(pool);
-        const token = req.headers['x-auth-token'];
+        console.log("Cookie Token" , req.cookies['x-auth-token'])
+        
+        const token = req.headers['x-auth-token'] || req.cookies['x-auth-token']
 
         if (!token) {
             return res.status(401).send('No token provided');
         }
 
-        const decodedPayload = jwt.verify(token, process.env.JWT_SECRET);
-        const { userid, handle, email } = decodedPayload;
+        const decodedPayload = jwt.verify(token, process.env.JWT_SECRET)
+        const { userid, handle, email } = decodedPayload
 
-        const selectQuery = `SELECT * FROM [users] WHERE handle = @handle AND email = @email`;
-        request.input('handle', sql.NVarChar, handle);
-        request.input('email', sql.NVarChar, email);
+        const user = await db.get("select * from users where (userid=$userid)" , 
+            {
+                $userid : userid
+            } 
+        )
 
-        const selectedUSer = await request.query(selectQuery);
-
-        if (selectedUSer.recordset.length === 0) {
+        if (user === undefined) {
             return res.status(400).send('User does not exist. You need to sign up');
         }
-
+        // console.log("user" , user)
+        
         // req.user = { userid };  // Add user information to the request object
-        res.locals.userid = userid
-        next();
+        res.locals.userid = user.userid
+        res.locals.token = token
+        // localStorage.setItem('token', token)
+        // console.log("from auth",res.locals.userid)
+        
+        next()
     } catch (error) {
         console.error('Authentication error:', error);
         res.status(500).send('Server error');

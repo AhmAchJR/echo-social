@@ -5,8 +5,8 @@ import { fileURLToPath } from "url"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const profileDest = path.join(__dirname , "../images/profileImages")
-const postDest = path.join(__dirname , "../images/postImages")
+const profileDest = path.join("/images/profileImages")
+const postDest = path.join("/images/postImages")
 
 const profileStorage = multer.diskStorage({             // You define storage configuration
     destination : (req , file , cb)=>{
@@ -20,8 +20,14 @@ const profileStorage = multer.diskStorage({             // You define storage co
         // cb(null, filename);
 
         cb(null , new Date().toISOString().replace(/:/g , "-") + file.originalname)
+        /*
+        null means there is no error. It's just a signal to Multer (or any other function) that everything is working as expected.
+        profileDest is the second argument, which is the directory where the file will be saved.
+        */ 
     }
 })
+
+//This is the Multer configuration object where you define how files should be handled.
 
 export const uploadProfileImg = multer({
     storage : profileStorage , 
@@ -32,6 +38,11 @@ export const uploadProfileImg = multer({
             return cb(new Error('Invalid file type. Only JPEG, PNG, and GIF files are allowed.'));
         }
         cb(null, true)
+        // This is the callback function that you use to tell Multer whether the file should be accepted or rejected.
+        /*If the file type is not allowed (i.e., it’s not JPEG, PNG, or GIF), you call the callback 
+        cb(new Error('Invalid file type. Only JPEG, PNG, and GIF files are allowed.')). This will reject the file upload, 
+        and Multer will send an error message back to the client.*/
+        //If the file type is allowed, you call cb(null, true). The null indicates there is no error, and true means the file is accepted for upload.
         }
     })
 

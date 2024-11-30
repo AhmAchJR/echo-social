@@ -1,29 +1,41 @@
-import sql from 'mssql'
-import connectDb from '../db/db.js'
+
+import dbconnection from '../db/db.js'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import dotenv from 'dotenv'
 import Message from 'tedious/lib/message.js'
 dotenv.config()
+const db = await dbconnection()
 
-export const getUserById = async(req , res)=>{
-    const userid = parseInt(req.params.id , 10)
-
-    try{
-    const pool =await  connectDb()
-    const request = new sql.Request(pool)
-    request.input("userid" , sql.Int , userid)
+export const getUserById = async (req, res) => {
     
-    const selectQuery = `select userid , email , handle , bio , username , pic from [users] where userid = @userid;`
-    const user = await request.query(selectQuery) 
+    const userid = Number(req.params.id)
+    if(!userid) return res.redirect("/user/" + res.locals.userid)
+    try {
+        // Query to select user by ID
+        const selectQuery = `
+            SELECT userid, email, handle, bio, username, pic 
+            FROM users 
+            WHERE userid = ?;
+        `
 
-    return res.status(200).json({
-        message : "User" , 
-        user : user
-    })
-    }catch (error) {
-        console.error('Error Get User:', error)
-        res.status(500).send('Server error')
+        // Execute the query
+        const user = await db.get(selectQuery, [userid])
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" })
+        }
+
+        // Send the response with the user data
+        // return res.status(200).json({
+        //     message: "User",
+        //     user: user
+        // })
+
+        return res.render("profile" , user)
+    } catch (error) {
+        console.error("Error Get User:", error)
+        return res.status(500).send("Server error")
     }
 }
 

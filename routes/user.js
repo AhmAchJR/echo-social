@@ -5,7 +5,7 @@ import { uploadProfileImg } from "../middlewares/uploadMiddleware.js";
 import authorizing from "../middlewares/authorizing.js";
 const router = express.Router()
 
-router.get("/:id" , getUserById)
+router.get("/:id" , authorizing , getUserById) 
 router.patch("/:id/" , authenticate , uploadProfileImg.single("image") , updateUser)
 router.delete("/:id" , authorizing , deleteUser)
 

@@ -1,17 +1,25 @@
 import sql from "mssql"
-import connectDb from "../db/db.js"
-const pool = await connectDb()
-import path from 'path'
+import dbConnection from "../db/db.js"
+import path, { resolve } from 'path'
+import { log } from "console"
+
+const db = await dbConnection()
 
 export const getAllPosts = async(req , res)=>{
     try{
+    const allPosts = await db.all("select [images].imgurl , [post].* from [post] inner join [images] on [images].postid = [post].postid" , 
+        [],
+        function(err , rows){
+            if(err){
+                console.error("Error Selectiong Data:", err)
+            }
 
-    const request = new sql.Request(pool)
-    const selectQuery = `select [images].imgurl , [post].* from [post] inner join [images] on [images].postid = [post].postid`
-    const allPosts = await request.query(selectQuery)
+            return rows
+        }
+    )
     return res.status(200).json({
         message : "All Posts" , 
-        Post : allPosts.recordset
+        Post : allPosts
     })
     }catch(error){
         console.error('Error Get All post:', error)
@@ -23,22 +31,28 @@ export const getPostById = async(req , res)=>{
     
     try{
 
-    const postid = parseInt(req.params.id , 10)
+    const postid = Number(req.params.id)
     
     if (isNaN(postid)) {
         return res.status(400).json({ message: 'Invalid post ID' });
     }
-    const request = new sql.Request(pool)
-    request.input("postid" , sql.Int , postid)
-
-    const selectQuery = `select [images].imgurl , [post].* from [post] inner join [images] 
+    const selectedPost = await db.all(`select [images].imgurl , [post].* from [post] inner join [images] 
                         on [images].postid = [post].postid 
-                        where post.postid = @postid;`
+                        where post.postid = $postid` , {
+                            $postid : postid 
+                        },
+                        function(err , row){
+                            if(err){
+                                console.error("Error Selecting Data:", err)
+                            }
+
+                            return row
+                        }
+                    )
     
-    const post = await request.query(selectQuery)
     return res.status(200).json({
         message : "Your Post" , 
-        post : post
+        post : selectedPost
     })
     }catch (error) {
         console.error('Error Get post:', error)
@@ -47,7 +61,6 @@ export const getPostById = async(req , res)=>{
 }
 
 export const createPost = async(req , res)=>{
-    const request = new sql.Request(pool)
 
     const {content , visibility} = req.body
     console.log('Request Body:', req.body);
@@ -59,30 +72,43 @@ export const createPost = async(req , res)=>{
     const userid = res.locals.userid
     let insertedImgUrls = []
     try{
-        const insertQuery = `insert into [post] (userid , content , visibility)
-                                output inserted.userid , inserted.content , inserted.visibility , inserted.postid
-                                values (@userid , @content , @visibility)`
-        request.input('userid' , sql.Int , userid)
-        request.input('content' , sql.NVarChar , content)
-        request.input('visibility', sql.NVarChar, visibility || 'public')
-        
-        const insertedPost = await request.query(insertQuery)
-        const postid = insertedPost.recordset[0].postid
+        const insertedPostId = await db.run("insert into post (userid , content , visibility) values ($userid , $content , $visibility)" , 
+            {
+                $userid : userid , 
+                $content : content , 
+                $visibility : visibility 
+            } , 
+            function (err) {
+                if (err) {
+                    console.error("Error inserting data:", err)
+                }
+
+                // return this.lastID
+            }
+        )
+
+        if(!insertedPostId){
+            console.log("Error Inserting The Post" , insertedPostId)
+            
+        }
 
         const imgUrls = req.files.map(file =>{
             return `${file.path}`
         })
 
         if(imgUrls.length>0){
-
+// stmt: An object representing the prepared SQL statement.
+// This is typically empty or contains internal metadata about the execution.
             const imageInsertPromises = imgUrls.map((url)=>{
-                const insertImg = `insert into [images] (postid , imgurl)
-                                    output inserted.imgurl
-                                    values (@postid , @url)`
-                request.input("postid" , sql.Int , postid)
-                request.input("url" , sql.NVarChar , url)
-
-                return request.query(insertImg)
+                const insertImg = `insert into images (postid , imgurl) values($postid , $imgurl)`
+                return db.run(insertImg , {$postid : insertedPostId.lastID , $imgurl : url} , 
+                    function(error){
+                        if(error){
+                            console.log("Error Inserting The Img Url" , error)
+                        }
+                        // return this.lastID
+                    }
+                )
             })
 
             insertedImgUrls =  await Promise.all(imageInsertPromises)
@@ -92,9 +118,9 @@ export const createPost = async(req , res)=>{
         res.status(201)
         .json(
             {message :'Post created successfully' , 
-                post : insertedPost , 
-                visibility : insertedPost.recordset[0].visibility,
-                content : insertedPost.recordset[0].content , 
+                post : insertedPostId , 
+                visibility : visibility,
+                content : content, 
                 images : insertedImgUrls
             });
 
@@ -106,51 +132,29 @@ export const createPost = async(req , res)=>{
 }
 
 export const deletePost = async (req , res)=>{
-    const postid = parseInt(req.params.id, 10);
-    const userid = res.locals.userid; // Assuming you set user id in `res.locals` from middleware
+    const postid = Number(req.params.id)
+    const userid = res.locals.userid // Assuming you set user id in `res.locals` from middleware
 
     try {
-        const pool = await connectDb();
-        const request = new sql.Request(pool);
-        request.input("postid", sql.Int, postid);
-        request.input("userid", sql.Int, userid);
-
         // Check if the post exists and belongs to the user
-        const selectQuery = `
-            SELECT userid FROM [post] WHERE postid = @postid;
-        `;
-        const result = await request.query(selectQuery);
-
-        if (result.recordset.length === 0) {
+        
+        console.log("begin");
+        const selectQuery = `select * from post where userid = $userid;`;
+        let post = 
+            await db.get(selectQuery, { $userid: userid })
+        if (!post) {
             return res.status(404).send("Post not found");
         }
 
-        const postOwner = result.recordset[0].userid;
-        if (userid !== postOwner) {
-            return res.status(403).send("You do not have permission to delete this post");
-        }
-
+        console.log("end");
+    
         // Delete the post and associated images
-        const deleteQuery = `
-            BEGIN TRANSACTION;
+        // db.exec("BEGIN TRANSACTION;")
+        const deleteQuery = `DELETE FROM post WHERE postid = $postid`;
 
-            BEGIN TRY
-                -- Delete associated images
-                DELETE FROM [images] WHERE postid = @postid;
+        const deletePost = await db.run(deleteQuery, { $postid: postid })
 
-                -- Delete the post
-                DELETE FROM [post] WHERE postid = @postid;
-
-                COMMIT TRANSACTION;
-            END TRY
-            BEGIN CATCH
-                ROLLBACK TRANSACTION;
-                SELECT ERROR_MESSAGE() AS ErrorMessage;
-            END CATCH;
-        `;
-
-        const deletePost = await request.query(deleteQuery);
-
+        //db.exec("COMMIT;")
         res.status(200).json({
             message: "Post deleted successfully" , 
             deletedPost : deletePost
@@ -163,22 +167,28 @@ export const deletePost = async (req , res)=>{
 
 export const updatePost = async(req , res)=>{
 
-        const postid = parseInt (req.params.id , 10)
+        const postid = Number (req.params.id)
         const uploadedFiles = req.files; // Assuming `upload.array('images')` for multiple files
         const newPostObject = req.body
+        let {userid} = res.locals
         console.log(newPostObject)
+        console.log(userid)
 
         try {
-            const pool = await connectDb()
-            const request = new sql.Request(pool)
-            request.input("postid", sql.Int, postid)
-            request.input("userid", sql.Int, res.locals.userid)
-    
-            // Retrieve the post to check ownership
-            const selectQuery = `SELECT userid FROM [post] WHERE postid = @postid`;
-            const selectedPost = await request.query(selectQuery);
-    
-            if (res.locals.userid !== selectedPost.recordset[0].userid) {
+            
+            // Retrieve the post to check ownership 
+            const selectedPost = await db.get("select * from post where postid = $postid" , 
+                {$postid : postid} )
+
+            console.log(selectedPost)
+            
+            if (!selectedPost) {
+                return res.status(404).send("Post not found");
+            }
+                
+            console.log(selectedPost)
+            
+            if (res.locals.userid !== selectedPost.userid) {
                 return res.status(401).send("Not Your Post");
             }
 
@@ -192,24 +202,23 @@ export const updatePost = async(req , res)=>{
     
             const arrayFieldsToBeUpdate = Object.keys(newPostObject);
     
-            let setPostClause = [];
-            let setImgClause = [];
+            let setPostClause = []
+            let setPostParams = []
+            let setImgClause = []
+            let setImgParams = []
     
-            const sqlTypeMapping = {
-                content: sql.NVarChar,
-                visibility: sql.NVarChar,
-                imgurl: sql.NVarChar
-            };
+            // const sqlTypeMapping = {
+            //     content: sql.NVarChar,
+            //     visibility: sql.NVarChar,
+            //     imgurl: sql.NVarChar
+            // };
             
             console.log(arrayFieldsToBeUpdate)
             
             arrayFieldsToBeUpdate.forEach(field => {
                 if (newPostObject[field] !== undefined) {
-                    const sqlType = sqlTypeMapping[field];
-                    if (sqlType) {
-                        request.input(field, sqlType, newPostObject[field]);
-                        setPostClause.push(`post.${field} = @${field}`);
-                    }
+                    setPostClause.push(`${field} = ?`)
+                    setPostParams.push(newPostObject[field])
                 }
             })
 
@@ -217,48 +226,50 @@ export const updatePost = async(req , res)=>{
         if (uploadedFiles && uploadedFiles.length > 0) {
             uploadedFiles.forEach(file => {
                 // Assume images have a column like `imgurl`
-                setImgClause.push(`images.imgurl = '${file.path}'`);
+                setImgClause.push('imgurl = ?')
+                setImgParams.push(file.path)
             })
         }
 
             
             console.log(setImgClause)
             console.log(setPostClause)
-            
-            const updateQuery = `
-                BEGIN TRANSACTION;
-    
-                BEGIN TRY
-                    -- Update the [post] table
-                    UPDATE [post]
-                    SET ${setPostClause.join(", ")}
-                    FROM [post] 
-                    WHERE [post].postid = @postid;
-    
-                    -- Update the [images] table
-                    UPDATE [images]
-                    SET ${setImgClause.join(", ")}
-                    FROM [images] 
-                    WHERE [images].postid = @postid;
-    
-                    COMMIT TRANSACTION;
-                END TRY
-                BEGIN CATCH
-                    ROLLBACK TRANSACTION;
-                    SELECT ERROR_MESSAGE() AS ErrorMessage;
-                END CATCH;
-            `;
-    
-            console.log("Generated SQL Query:", updateQuery); // For debugging purposes
-    
-            const updatedPost = await request.query(updateQuery);
-    
+            let updatedPost = null
+            let updatedImg = null
+
+            setPostClause = setPostClause.join(',')
+            setImgClause = setImgClause.join(',')
+            // let testvar = null
+            try {
+
+                await db.run("BEGIN TRANSACTION");
+                if (setPostClause.length !== 0) {
+                    const query = `update post set ${setPostClause} where postid = ?`;
+                    updatedPost = await db.run(query, [...setPostParams, postid])
+                    // console.log("updatedPost",updatedPost)
+                }
+                // console.log("testvar" , testvar)
+                
+                if (setImgClause.length !== 0) {
+                    const query = `update images set ${setImgClause} where postid = ?`;
+                    updatedImg =await db.run(query, [...setImgParams, postid])
+            } 
+                await db.run("COMMIT")
+
+            }catch (error) {
+                await db.run("ROLLBACK")
+                console.log("Error During Transaction", error)
+            }
+            //console.log("Generated SQL Query:", updateQuery); // For debugging purposes
+
             res.status(200).json({
                 message: "Update Post Successfully",
-                updatedPost: updatedPost.recordset
+                updatedPost: updatedPost , 
+                updatedImg : updatedImg
             });
         } catch (error) {
-            console.error('Error creating post: ', error);
+            console.log(userid)
+            console.error('Error Updating post: ', error);
             res.status(500).send('Server error');
         }
     
@@ -276,3 +287,19 @@ export const updatePost = async(req , res)=>{
                                 from [post] inner join [images]
                                 on [post].postid = [images].postid 
                                 where [images].postid = @postid;*/
+
+
+
+//  Callback Behavior of db.run()
+// In the code snippet, you are using db.run() with a callback function. 
+//The callback function does not directly affect the value resolved or returned by db.run(). Instead:
+// The callback is executed asynchronously after the db.run() operation completes.
+// The value of return inside the callback (e.g., return this.lastID) is local to the callback function. It is not passed to the db.run() caller or promise.
+
+// 2. What db.run() Actually Returns
+// If db.run() is used with a callback:
+// db.run() itself does not return a meaningful value. 
+//It simply starts the query execution and calls the callback when done.
+// The value in the callback (this.lastID or this.changes) is not returned or resolved to the caller.
+// If db.run() is wrapped in a promise (explicitly or using a Promise-based library like sqlite):
+// The promise resolves with an object containing metadata about the execution

@@ -1,49 +1,48 @@
 
-import sql from "mssql"
-import connectDb from "../db/db.js"
-const pool = await connectDb()
+import dbConnection from "../db/db.js"
+const db = await dbConnection()
+console.log(db)
+// console.dir(db , { showHidden: true, depth: null })
 
 
 export const createLike = async(req , res)=>{
 
         try {
+
             const { postid } = req.params; // Post ID from URL parameters
             const userid = res.locals.userid; // User ID from authenticated session
-    
+            
+            console.log('Received request:', { 
+                postid: req.params.postid, 
+                userid: res.locals.userid 
+            });
+        
             // Validate inputs
             if (!postid || isNaN(postid)) {
                 return res.status(400).send('Invalid post ID')
             }
     
-            const request = new sql.Request(pool);
-            request.input('postid', sql.Int, parseInt(postid, 10))
-            request.input('userid', sql.Int, userid)
-    
+        
             // Check if the like already exists
-            const checkQuery = `
-                SELECT COUNT(*) AS count
-                FROM [likes]
-                WHERE postid = @postid AND userid = @userid;
-            `
-            const checkResult = await request.query(checkQuery)
-            console.log(checkResult);
+            console.log('DB Instance Methods:', Object.keys(db))
+            const checkQuery = `select * from likes where postid = $postid AND userid = $userid`
+            const checkResult = await db.get(checkQuery, { $postid: postid, $userid: userid })
+
+            console.log(checkResult)
             
-            if (checkResult.recordset[0].count > 0) {
+            if (checkResult) {
                 return res.status(400).send('Like already exists')
             }
     
             // Insert a new like
-            const insertQuery = `
-                INSERT INTO [likes] (postid, userid)
-                output [likes].postid , [likes].userid , [likes].likeid
-                VALUES (@postid, @userid);
-            `;
-            const like = await request.query(insertQuery)
+            // let insertedLike = null
+            const insertQuery = `insert into likes (userid , postid) values (? , ?)`
+            const insertedLike = await db.run(insertQuery , [userid , postid])
             res.status(201)
             .json(
                 {
-                    message :'Comment Deleted Successfully' , 
-                    like : like
+                    message :'like Created Successfully' , 
+                    like : insertedLike
                 })
         } catch (error) {
             console.error('Error creating like:', error);
@@ -51,40 +50,44 @@ export const createLike = async(req , res)=>{
         }
     }
 
-export const deleteLike = async(req , res)=>{
-
+    export const deleteLike = async (req, res) => {
         try {
-            const { postid, likeid } = req.params; // Post ID and Like ID from URL parameters
-            const userid = res.locals.userid; // User ID from authenticated session
+            const { postid, likeid } = req.params  // Post ID and Like ID from URL parameters
+            const userid = res.locals.userid      // User ID from authenticated session
+    
+            // console.log('Received request:', {
+            //     postid: req.params.postid,
+            //     likeid: req.params.likeid,
+            //     userid: res.locals.userid
+            // });
     
             // Validate inputs
             if (!postid || !likeid || isNaN(postid) || isNaN(likeid)) {
-                return res.status(400).send('Invalid post ID or like ID');
+                return res.status(400).send('Invalid post ID or like ID')
             }
     
-            const request = new sql.Request(pool);
-            request.input('postid', sql.Int, parseInt(postid, 10));
-            request.input('likeid', sql.Int, parseInt(likeid, 10));
-            request.input('userid', sql.Int, userid);
+            // Check if the like exists
+            const checkQuery = `SELECT * FROM likes WHERE postid = $postid AND likeid = $likeid AND userid = $userid`
+            const checkResult = await db.get(checkQuery, { $postid: postid, $likeid: likeid, $userid: userid })
+    
+            console.log(checkResult)
+    
+            if (!checkResult) {
+                return res.status(404).send('Like not found or you not authorized')
+            }
     
             // Delete the like
-            const deleteQuery = `
-                DELETE FROM [likes]
-                WHERE postid = @postid AND likeid = @likeid AND userid = @userid;
-            `;
-            const deleteedLike = await request.query(deleteQuery);
-    
-            if (deleteedLike.rowsAffected[0] === 0) {
-                return res.status(404).send('Like not found or not authorized');
-            }
+            const deleteQuery = `DELETE FROM likes WHERE postid = ? AND likeid = ? AND userid = ?`
+            const deleteResult = await db.run(deleteQuery, [postid, likeid, userid])
     
             res.status(200).json({
-                message: 'Like deleted successfully', 
-                like : deleteedLike
-            });
-        } catch (error) {
-            console.error('Error deleting like:', error);
-            res.status(500).send('Server error');
-        }
+                message: 'Like deleted successfully',
+                result: deleteResult
+            })
     
-}
+        } catch (error) {
+            console.error('Error deleting like:', error)
+            res.status(500).send('Server error')
+        }
+    };
+    
