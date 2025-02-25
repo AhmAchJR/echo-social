@@ -22,8 +22,8 @@ Ensure you have the following installed:
 #### Clone the Repository:
 
 ```sh
-git clone https://github.com/AhmAchJR/echo-social-socet.git
-cd echo-social-socet
+git clone https://github.com/AhmAchJR/echo-social.git
+cd echo-social
 ```
 
 #### Install Dependencies:
@@ -75,9 +75,9 @@ The application will be running on [http://localhost:3000](http://localhost:3000
 
 - **Backend**: Node.js, Express.js
 - **Frontend**: EJS, HTML, CSS
-- **Database**: SQLite (or another SQL database)
+- **Database**: SQLite
 - **Real-time Communication**: WebSockets (ws library)
-- **Authentication**: Sessions (using express-session)
+- **Authentication**: JWT
 
 ## Contributing
 
